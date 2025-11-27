@@ -3,10 +3,10 @@ from abc import ABC, abstractmethod
 
 class Policy(ABC):
     @abstractmethod
-    def build_observation(self, self_state, neighbor_msgs):
+    def build_observation(self, self_state, neighbor_msgs, targets=None):
         ...
 
     @abstractmethod
-    def act(self, obs):
-        """Return action vector, e.g. delta_v."""
+    def act(self, obs, return_log_prob: bool = False):
+        """Return action vector (delta_v)."""
         ...

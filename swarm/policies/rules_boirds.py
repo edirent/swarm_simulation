@@ -9,13 +9,13 @@ class BoidsPolicy(Policy):
         self.w_coh = w_coh
         self.max_speed = max_speed
 
-    def build_observation(self, self_state, neighbor_msgs):
+    def build_observation(self, self_state, neighbor_msgs, targets=None):
         return (self_state, neighbor_msgs)
 
-    def act(self, obs):
+    def act(self, obs, return_log_prob: bool = False):
         self_state, neighbor_msgs = obs
         if not neighbor_msgs:
-            return np.zeros_like(self_state.vel)
+            return (np.zeros_like(self_state.vel), None) if return_log_prob else np.zeros_like(self_state.vel)
 
         ps = np.array([m.pos for m in neighbor_msgs])
         vs = np.array([m.vel for m in neighbor_msgs])
@@ -37,4 +37,4 @@ class BoidsPolicy(Policy):
         # clamp
         if np.linalg.norm(dv) > self.max_speed:
             dv = dv / np.linalg.norm(dv) * self.max_speed
-        return dv
+        return (dv, None) if return_log_prob else dv

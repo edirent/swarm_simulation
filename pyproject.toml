@@ -12,6 +12,7 @@ dependencies = [
     "numpy",
     "matplotlib",
     "pyyaml",
+    "torch>=2.3",
 ]
 authors = [
     { name = "SwarmSim Contributors" },
