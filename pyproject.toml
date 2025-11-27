@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "swarm-tinyml-sim"
+version = "0.1.0"
+description = "Swarm simulation with pluggable policies (rules or tiny ML) and broadcast comms."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "matplotlib",
+    "pyyaml",
+]
+authors = [
+    { name = "SwarmSim Contributors" },
+]
+
+[project.urls]
+Homepage = "https://example.com"

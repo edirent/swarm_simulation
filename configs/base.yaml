@@ -1,0 +1,14 @@
+dt: 0.1
+env:
+  bounds: [-10, 10, -10, 10]
+network:
+  loss_prob: 0.0
+  max_range: null
+policy:
+  type: boids
+  w_sep: 1.0
+  w_align: 0.5
+  w_coh: 0.5
+  max_speed: 1.0
+agents:
+  count: 20

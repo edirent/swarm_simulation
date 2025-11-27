@@ -1,0 +1,10 @@
+inherits: base.yaml
+agents:
+  count: 50
+network:
+  loss_prob: 0.1
+  max_range: 6.0
+policy:
+  w_sep: 1.5
+  w_align: 0.7
+  w_coh: 0.7
