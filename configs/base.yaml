@@ -3,6 +3,7 @@ steps: 5000
 render_every: 2
 env:
   bounds: [-20, 20, -20, 20]
+  sense_radius: 6.0
   obstacles:
     - center: [-12, -5]
       radius: 2.0
@@ -45,5 +46,6 @@ agents:
 reward:
   hit: 10.0
   crash: -5.0
+  boundary: -10.0
   step: -0.01
   approach: 0.1

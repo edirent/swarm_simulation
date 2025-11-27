@@ -29,6 +29,8 @@ DEFAULT_CONFIG = {
     "render_every": 2,
     "env": {
         "bounds": [-20, 20, -20, 20],
+        "sense_radius": 6.0,
+        "enemies": [],
         "obstacles": [
             {"center": [-12, -5], "radius": 2.0},
             {"center": [-8, 8], "radius": 1.5},
@@ -59,7 +61,7 @@ DEFAULT_CONFIG = {
         "checkpoint": None,
     },
     "agents": {"count": 30},
-    "reward": {"hit": 10.0, "crash": -5.0, "step": -0.01, "approach": 0.1},
+    "reward": {"hit": 10.0, "crash": -5.0, "step": -0.01, "approach": 0.1, "boundary": -10.0},
 }
 
 
@@ -119,6 +121,7 @@ def build_agents(cfg, bounds):
     agents = []
     N = cfg["agents"]["count"]
     shared_policy = make_policy(cfg["policy"])
+    setattr(shared_policy, "bounds", bounds)
     for i in range(N):
         st = AgentState(
             id=i,
@@ -142,7 +145,13 @@ def build_env(cfg):
         Target(center=t["center"], radius=t.get("radius", 0.3))
         for t in env_cfg.get("targets", [])
     ]
-    return SwarmEnv(bounds=env_cfg["bounds"], obstacles=obstacles, targets=targets)
+    return SwarmEnv(
+        bounds=env_cfg["bounds"],
+        obstacles=obstacles,
+        targets=targets,
+        sense_radius=env_cfg.get("sense_radius", None),
+        enemies=env_cfg.get("enemies", []),
+    )
 
 
 def main():
@@ -177,7 +186,7 @@ def main():
     for step in range(cfg["steps"]):
         state, rewards, collisions, done, hits = sim.step()
         if renderer and step % cfg["render_every"] == 0:
-            renderer.render(state)
+            renderer.render(state, enemies=list(sim.enemies.values()))
         if logger:
             logger.log_state(state)
         if done:

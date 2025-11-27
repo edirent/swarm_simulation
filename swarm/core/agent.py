@@ -8,11 +8,11 @@ class Agent:
         self.state = state
         self.policy = policy
 
-    def step(self, neighbor_msgs: list[SwarmMessage], dt: float, targets=None):
+    def step(self, neighbor_msgs: list[SwarmMessage], visible_targets, dt: float):
         """
         Single-threaded, no locks. All perception + decision here.
         """
-        obs = self.policy.build_observation(self.state, neighbor_msgs, targets=targets)
+        obs = self.policy.build_observation(self.state, neighbor_msgs, visible_targets)
         action = self.policy.act(obs)  # typically target velocity / accel
         self._apply_action(action, dt)
         return obs, action

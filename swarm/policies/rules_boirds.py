@@ -9,7 +9,7 @@ class BoidsPolicy(Policy):
         self.w_coh = w_coh
         self.max_speed = max_speed
 
-    def build_observation(self, self_state, neighbor_msgs, targets=None):
+    def build_observation(self, self_state, neighbor_msgs, visible_targets=None):
         return (self_state, neighbor_msgs)
 
     def act(self, obs, return_log_prob: bool = False):

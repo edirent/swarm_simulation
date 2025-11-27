@@ -1,0 +1,19 @@
+inherits: base.yaml
+env:
+  enemies:
+    - pos: [0, 0]
+      speed: 1.2
+      sense: 8.0
+      radius: 0.6
+reward:
+  hit: 20.0
+  crash: -25.0
+  boundary: -25.0
+  step: -0.02
+  approach: 0.15
+policy:
+  type: nn
+  k_max: 5
+  hidden: 64
+agents:
+  count: 30

@@ -25,21 +25,22 @@ class TinyMLP(nn.Module):
 
 
 class NNPolicy(Policy):
-    def __init__(self, model: nn.Module, k_max: int = 5, dim: int = 2, device: str | None = None, stochastic: bool = False, noise_std: float = 0.1):
+    def __init__(self, model: nn.Module, k_max: int = 5, dim: int = 2, device: str | None = None, stochastic: bool = False, noise_std: float = 0.1, bounds=None):
         self.device = device or get_device()
         self.model = model.to(self.device)
         self.k_max = k_max
         self.dim = dim
         self.stochastic = stochastic
         self.noise_std = noise_std
+        self.bounds = bounds
         self.model.eval()
 
     @staticmethod
     def obs_dim(dim=2, k_max=5) -> int:
-        # pos + vel + neighbors pos/vel + nearest target + battery/role
-        return dim * (2 * k_max + 3) + 2
+        # pos + vel + neighbors pos/vel + nearest target + boundary distances + battery/role
+        return dim * (2 * k_max + 5) + 2
 
-    def build_observation(self, self_state, neighbor_msgs, targets=None):
+    def build_observation(self, self_state, neighbor_msgs, visible_targets=None):
         k_max = self.k_max
         ps = np.array([m.pos for m in neighbor_msgs]) if neighbor_msgs else np.zeros((0, len(self_state.pos)))
         vs = np.array([m.vel for m in neighbor_msgs]) if neighbor_msgs else np.zeros((0, len(self_state.vel)))
@@ -53,16 +54,26 @@ class NNPolicy(Policy):
                 ps = np.vstack([ps, np.zeros((pad, ps.shape[1]))])
                 vs = np.vstack([vs, np.zeros((pad, vs.shape[1]))])
 
-        if targets:
-            active = [t for t in targets if getattr(t, "active", True)]
-            if active:
-                ds = [np.linalg.norm(t.center - self_state.pos) for t in active]
-                j = int(np.argmin(ds))
-                nearest = active[j].center - self_state.pos
-            else:
-                nearest = np.zeros_like(self_state.pos)
+        if visible_targets:
+            ds = [np.linalg.norm(t.center - self_state.pos) for t in visible_targets]
+            j = int(np.argmin(ds))
+            nearest = visible_targets[j].center - self_state.pos
         else:
             nearest = np.zeros_like(self_state.pos)
+
+        if self.bounds and len(self.bounds) >= 4:
+            xmin, xmax, ymin, ymax = self.bounds
+            boundary_feat = np.array(
+                [
+                    self_state.pos[0] - xmin,
+                    xmax - self_state.pos[0],
+                    self_state.pos[1] - ymin,
+                    ymax - self_state.pos[1],
+                ],
+                dtype=np.float32,
+            )
+        else:
+            boundary_feat = np.zeros(2 * self.dim, dtype=np.float32)
 
         feat = np.concatenate([
             self_state.pos,
@@ -70,6 +81,7 @@ class NNPolicy(Policy):
             ps.flatten(),
             vs.flatten(),
             nearest,
+            boundary_feat,
             np.array([self_state.battery, self_state.role], dtype=float)
         ])
         return feat.astype(np.float32)

@@ -56,12 +56,19 @@ def build_env(cfg):
         Target(center=t["center"], radius=t.get("radius", 0.5))
         for t in env_cfg.get("targets", [])
     ]
-    return SwarmEnv(bounds=env_cfg["bounds"], obstacles=obstacles, targets=targets)
+    return SwarmEnv(
+        bounds=env_cfg["bounds"],
+        obstacles=obstacles,
+        targets=targets,
+        sense_radius=env_cfg.get("sense_radius", None),
+        enemies=env_cfg.get("enemies", []),
+    )
 
 
 def build_agents(cfg, policy):
     agents = []
     bounds = cfg["env"]["bounds"]
+    setattr(policy, "bounds", bounds)
     N = cfg["agents"]["count"]
     for i in range(N):
         st = AgentState(
@@ -96,6 +103,8 @@ def rollout_episode(cfg, policy, max_steps, gamma, noise_std=0.2):
     for _ in range(max_steps):
         state, rewards, collisions, done, hits, logs = sim.step(return_logs=True)
         for aid, log in logs.items():
+            if not isinstance(log, dict) or "obs" not in log:
+                continue
             obs = log["obs"]
             act = log["action"]
             obs_buf.append(obs.astype(np.float32))
@@ -160,11 +169,11 @@ def main():
 
     base_cfg = {
         "dt": 0.1,
-        "env": {"bounds": [-20, 20, -20, 20], "obstacles": [], "targets": []},
+        "env": {"bounds": [-20, 20, -20, 20], "obstacles": [], "targets": [], "sense_radius": 6.0},
         "network": {"loss_prob": 0.0, "max_range": None},
         "policy": {"k_max": 5},
         "agents": {"count": 30},
-        "reward": {"hit": 10.0, "crash": -5.0, "step": -0.01, "approach": 0.1},
+        "reward": {"hit": 10.0, "crash": -5.0, "boundary": -10.0, "step": -0.01, "approach": 0.1},
     }
     cfg = deep_update(base_cfg, load_config(args.config))
     reinforce_train(

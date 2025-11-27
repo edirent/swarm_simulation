@@ -15,21 +15,83 @@ class Target:
 
 
 class SwarmEnv:
-    def __init__(self, bounds, obstacles=None, targets=None, tasks=None):
+    def __init__(self, bounds, obstacles=None, targets=None, tasks=None, sense_radius: float | None = None, enemies=None):
         self.bounds = bounds  # [xmin, xmax, ymin, ymax]
         self.obstacles = obstacles or []
         self.targets = targets or []
         self.tasks = tasks or []
+        self.sense_radius = sense_radius
+        self.enemy_spawns = enemies or []
 
-    def enforce_constraints(self, swarm_state):
+    def visible_neighbors(self, self_state, swarm_state):
         """
-        Clamp agent positions inside bounds.
+        Return neighbor AgentState list within sense_radius (if set), otherwise all.
+        """
+        if self.sense_radius is None:
+            return [st for j, st in swarm_state.agents.items() if j != self_state.id]
+        vis = []
+        for j, st in swarm_state.agents.items():
+            if j == self_state.id:
+                continue
+            d = np.linalg.norm(st.pos - self_state.pos)
+            if d <= self.sense_radius:
+                vis.append(st)
+        return vis
+
+    def visible_targets(self, self_state):
+        """
+        Return active targets within sense_radius (if set), otherwise all active.
+        """
+        active = [t for t in self.targets if getattr(t, "active", True)]
+        if self.sense_radius is None:
+            return active
+        vis = []
+        for t in active:
+            d = np.linalg.norm(t.center - self_state.pos)
+            if d <= self.sense_radius:
+                vis.append(t)
+        return vis
+
+    def enforce_constraints(self, swarm_state, tol=1e-6, damp_on_hit: float | None = 1.0):
+        """
+        Reflect or damp velocity when hitting bounds, and report boundary contacts.
+        Returns:
+          boundary_hits: {agent_id: True/False}
         """
         xmin, xmax, ymin, ymax = self.bounds
-        for st in swarm_state.agents.values():
+        boundary_hits = {i: False for i in swarm_state.agents.keys()}
+        for i, st in swarm_state.agents.items():
             x, y = st.pos[:2]
-            st.pos[0] = min(max(x, xmin), xmax)
-            st.pos[1] = min(max(y, ymin), ymax)
+            vx, vy = st.vel[:2]
+
+            # X axis
+            if x < xmin:
+                st.pos[0] = xmin
+                st.vel[0] = abs(vx) * (damp_on_hit or 0.0)
+                boundary_hits[i] = True
+            elif x > xmax:
+                st.pos[0] = xmax
+                st.vel[0] = -abs(vx) * (damp_on_hit or 0.0)
+                boundary_hits[i] = True
+
+            # Y axis
+            if y < ymin:
+                st.pos[1] = ymin
+                st.vel[1] = abs(vy) * (damp_on_hit or 0.0)
+                boundary_hits[i] = True
+            elif y > ymax:
+                st.pos[1] = ymax
+                st.vel[1] = -abs(vy) * (damp_on_hit or 0.0)
+                boundary_hits[i] = True
+
+            if not boundary_hits[i]:
+                boundary_hits[i] = (
+                    abs(st.pos[0] - xmin) <= tol
+                    or abs(st.pos[0] - xmax) <= tol
+                    or abs(st.pos[1] - ymin) <= tol
+                    or abs(st.pos[1] - ymax) <= tol
+                )
+        return boundary_hits
 
     def check_collisions(self, swarm_state):
         """

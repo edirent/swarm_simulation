@@ -14,8 +14,8 @@ class TinyMLPPolicy(Policy):
 
     @staticmethod
     def obs_dim(dim=2, k_max=5) -> int:
-        # pos + vel + neighbors pos/vel + nearest target + battery/role
-        return dim * (2 * k_max + 3) + 2
+        # pos + vel + neighbors pos/vel + nearest target + boundary distances + battery/role
+        return dim * (2 * k_max + 5) + 2
 
     @classmethod
     def init_weights(cls, dim=2, k_max=5, hidden=16, seed=0):
@@ -27,7 +27,7 @@ class TinyMLPPolicy(Policy):
         b2 = np.zeros(dim)
         return {"W1": W1, "b1": b1, "W2": W2, "b2": b2}
 
-    def build_observation(self, self_state, neighbor_msgs, targets=None):
+    def build_observation(self, self_state, neighbor_msgs, visible_targets=None):
         # Encode K nearest neighbors into fixed-size feature
         k_max = self.k_max
         ps = np.array([m.pos for m in neighbor_msgs]) if neighbor_msgs else np.zeros((0, len(self_state.pos)))
@@ -43,16 +43,26 @@ class TinyMLPPolicy(Policy):
                 vs = np.vstack([vs, np.zeros((pad, vs.shape[1]))])
 
         # nearest active target relative position
-        if targets:
-            active = [t for t in targets if getattr(t, "active", True)]
-            if active:
-                ds = [np.linalg.norm(t.center - self_state.pos) for t in active]
-                j = int(np.argmin(ds))
-                nearest = active[j].center - self_state.pos
-            else:
-                nearest = np.zeros_like(self_state.pos)
+        if visible_targets:
+            ds = [np.linalg.norm(t.center - self_state.pos) for t in visible_targets]
+            j = int(np.argmin(ds))
+            nearest = visible_targets[j].center - self_state.pos
         else:
             nearest = np.zeros_like(self_state.pos)
+
+        if hasattr(self, "bounds") and self.bounds and len(self.bounds) >= 4:
+            xmin, xmax, ymin, ymax = self.bounds
+            boundary_feat = np.array(
+                [
+                    self_state.pos[0] - xmin,
+                    xmax - self_state.pos[0],
+                    self_state.pos[1] - ymin,
+                    ymax - self_state.pos[1],
+                ],
+                dtype=float,
+            )
+        else:
+            boundary_feat = np.zeros(2 * self.dim, dtype=float)
 
         feat = np.concatenate([
             self_state.pos,
@@ -60,6 +70,7 @@ class TinyMLPPolicy(Policy):
             ps.flatten(),
             vs.flatten(),
             nearest,
+            boundary_feat,
             np.array([self_state.battery, self_state.role], dtype=float)
         ])
         return feat

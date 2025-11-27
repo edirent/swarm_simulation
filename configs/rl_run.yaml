@@ -1,0 +1,6 @@
+inherits: rl_boundary.yaml
+policy:
+  type: nn
+  k_max: 5
+  hidden: 64
+  checkpoint: checkpoints/rl_policy_adversarial_v1.pt

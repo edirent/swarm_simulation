@@ -15,6 +15,7 @@ class SwarmRenderer2D:
         if self._interactive:
             plt.ion()
         self.scat = None
+        self.enemy_scat = None
         self.obstacle_patches = []
         self.target_patches = []
         self.target_labels = []
@@ -53,14 +54,29 @@ class SwarmRenderer2D:
             patch.set_edgecolor("darkgreen" if tgt.active else "darkred")
             patch.set_alpha(0.5 if tgt.active else 0.25)
 
-    def render(self, swarm_state: SwarmState):
+    def render(self, swarm_state: SwarmState, enemies=None):
         positions = np.array([a.pos for a in swarm_state.agents.values()])
-        if positions.size == 0:
-            return
-        if self.scat is None:
-            self.scat = self.ax.scatter(positions[:, 0], positions[:, 1], c="blue", s=20, zorder=4, alpha=0.8)
-        else:
-            self.scat.set_offsets(positions[:, :2])
+        if positions.size > 0:
+            if self.scat is None:
+                self.scat = self.ax.scatter(positions[:, 0], positions[:, 1], c="blue", s=20, zorder=4, alpha=0.8, label="agents")
+            else:
+                self.scat.set_offsets(positions[:, :2])
+        enemies = enemies or []
+        enemy_positions = np.array([e.state.pos for e in enemies if getattr(e.state, "alive", True)])
+        if enemy_positions.size > 0:
+            if self.enemy_scat is None:
+                self.enemy_scat = self.ax.scatter(
+                    enemy_positions[:, 0],
+                    enemy_positions[:, 1],
+                    c="red",
+                    s=30,
+                    zorder=5,
+                    alpha=0.9,
+                    marker="x",
+                    label="enemies",
+                )
+            else:
+                self.enemy_scat.set_offsets(enemy_positions[:, :2])
         self._update_targets()
         self.ax.set_title(f"t={swarm_state.t:.2f}")
         if self._interactive:

@@ -57,7 +57,13 @@ def build_env(cfg):
         Target(center=t["center"], radius=t.get("radius", 0.3))
         for t in env_cfg.get("targets", [])
     ]
-    return SwarmEnv(bounds=env_cfg["bounds"], obstacles=obstacles, targets=targets)
+    return SwarmEnv(
+        bounds=env_cfg["bounds"],
+        obstacles=obstacles,
+        targets=targets,
+        sense_radius=env_cfg.get("sense_radius", None),
+        enemies=env_cfg.get("enemies", []),
+    )
 
 
 def build_agents(cfg, policy):
@@ -108,6 +114,7 @@ def collect_dataset(cfg, episodes=5, max_steps=500):
         dim=2,
         device=device,
     )
+    setattr(student_obs_encoder, "bounds", cfg["env"]["bounds"])
     obs_buf: List[np.ndarray] = []
     act_buf: List[np.ndarray] = []
     dt = cfg["dt"]
@@ -126,7 +133,10 @@ def collect_dataset(cfg, episodes=5, max_steps=500):
 
             for i, agent in enumerate(agents):
                 msgs = inbox[i]
-                obs = student_obs_encoder.build_observation(agent.state, msgs, env.targets)
+                if env.sense_radius is not None:
+                    msgs = [m for m in msgs if np.linalg.norm(m.pos - agent.state.pos) <= env.sense_radius]
+                visible_targets = env.visible_targets(agent.state)
+                obs = student_obs_encoder.build_observation(agent.state, msgs, visible_targets)
                 act = expert_action(agent.state, msgs, env, boids)
                 obs_buf.append(obs)
                 act_buf.append(act.astype(np.float32))
@@ -189,7 +199,7 @@ def main():
     cfg = deep_update(
         {
             "dt": 0.1,
-            "env": {"bounds": [-10, 10, -10, 10], "obstacles": [], "targets": []},
+            "env": {"bounds": [-10, 10, -10, 10], "obstacles": [], "targets": [], "sense_radius": 6.0},
             "network": {"loss_prob": 0.0, "max_range": None},
             "policy": {"k_max": 5},
             "agents": {"count": 20},
