@@ -1,0 +1,15 @@
+teams:
+  blue:
+    count: 12
+    policy:
+      type: nn
+      k_max: 5
+      hidden: 64
+      checkpoint: checkpoints/self_play/blue_gen2.pt
+  red:
+    count: 12
+    policy:
+      type: nn
+      k_max: 5
+      hidden: 64
+      checkpoint: checkpoints/self_play/red_gen3.pt

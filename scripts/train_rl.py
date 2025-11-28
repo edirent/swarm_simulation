@@ -62,6 +62,7 @@ def build_env(cfg):
         targets=targets,
         sense_radius=env_cfg.get("sense_radius", None),
         enemies=env_cfg.get("enemies", []),
+        resource_cfg=cfg.get("resource", {}),
     )
 
 
@@ -78,6 +79,7 @@ def build_agents(cfg, policy):
             battery=1.0,
             role=0,
             task_id=None,
+            team=0,
         )
         agents.append(Agent(st, policy))
     return agents

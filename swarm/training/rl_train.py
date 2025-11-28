@@ -56,6 +56,8 @@ def collect_episode(simulator, max_steps: int = 1000, gamma: float = 0.99) -> Tu
     for _ in range(max_steps):
         state, rewards, collisions, done, hits, logs = simulator.step(return_logs=True)
         for aid, log in logs.items():
+            if not isinstance(log, dict) or "obs" not in log:
+                continue
             buf.add(
                 agent_id=aid,
                 obs=log["obs"],

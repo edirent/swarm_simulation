@@ -20,7 +20,9 @@ class Simulator:
             "step": -0.01,
             "approach": 0.1,
             "boundary": -2.0,
+            "resource": 5.0,
         }
+        self.team_scores: dict[int, int] = {}
 
     def step(self, return_logs: bool = False):
         prev_state = SwarmState(
@@ -37,7 +39,8 @@ class Simulator:
             if self.env.sense_radius is not None:
                 msgs = [m for m in msgs if np.linalg.norm(m.pos - agent.state.pos) <= self.env.sense_radius]
             visible_targets = self.env.visible_targets(agent.state)
-            obs, action = agent.step(msgs, visible_targets, self.dt)
+            visible_resource = self.env.visible_resource(agent.state)
+            obs, action = agent.step(msgs, visible_targets, self.dt, visible_resource)
             step_logs[i] = {"obs": obs, "action": action}
 
         swarm_state = SwarmState(
@@ -47,12 +50,12 @@ class Simulator:
         boundary_hits = self.env.enforce_constraints(swarm_state)
 
         enemy_contacts = self._step_enemies_and_contacts(swarm_state)
-        collisions, hits = self.env.check_collisions(swarm_state)
-        rewards = self.compute_rewards(prev_state, swarm_state, collisions, hits, boundary_hits, enemy_contacts)
+        collisions, hits, resource_event = self.env.check_collisions(swarm_state)
+        rewards = self.compute_rewards(prev_state, swarm_state, collisions, hits, boundary_hits, enemy_contacts, resource_event)
 
         for i, st in swarm_state.agents.items():
             self.agents[i].state = st
-        self._prune_dead_agents(enemy_contacts)
+        self._prune_dead_agents(enemy_contacts, collisions)
 
         self.t += self.dt
         done = self.env.all_targets_done()
@@ -60,16 +63,18 @@ class Simulator:
             for aid, hit_boundary in boundary_hits.items():
                 step_logs[aid]["boundary_hit"] = hit_boundary
             step_logs["enemy_contacts"] = enemy_contacts
+            step_logs["resource_event"] = resource_event
             return swarm_state, rewards, collisions, done, hits, step_logs
-        return swarm_state, rewards, collisions, done, hits
+        return swarm_state, rewards, collisions, done, hits, resource_event
 
-    def compute_rewards(self, prev_state, new_state, collisions, hits, boundary_hits=None, enemy_contacts=None):
+    def compute_rewards(self, prev_state, new_state, collisions, hits, boundary_hits=None, enemy_contacts=None, resource_event=None):
         rewards = {i: 0.0 for i in new_state.agents.keys()}
         R_HIT = self.reward_cfg.get("hit", 10.0)
         R_CRASH = self.reward_cfg.get("crash", -5.0)
         R_STEP = self.reward_cfg.get("step", -0.01)
         R_APPROACH = self.reward_cfg.get("approach", 0.1)
         R_BOUNDARY = self.reward_cfg.get("boundary", -2.0)
+        R_RESOURCE = self.reward_cfg.get("resource", 5.0)
         enemy_contacts = enemy_contacts or []
         boundary_hits = boundary_hits or {i: False for i in new_state.agents.keys()}
 
@@ -91,6 +96,12 @@ class Simulator:
         for i, hit_boundary in boundary_hits.items():
             if hit_boundary:
                 rewards[i] += R_BOUNDARY
+
+        if resource_event is not None:
+            aid = resource_event["agent_id"]
+            rewards[aid] = rewards.get(aid, 0.0) + R_RESOURCE
+            team = getattr(new_state.agents.get(aid, None), "team", 0)
+            self.team_scores[team] = self.team_scores.get(team, 0) + 1
 
         for i, st in new_state.agents.items():
             if not self.env.targets:
@@ -120,6 +131,7 @@ class Simulator:
             role=st.role,
             task_id=st.task_id,
             alive=st.alive,
+            team=st.team,
         )
 
     def _init_enemies(self, enemy_cfg_list, bounds):
@@ -151,7 +163,14 @@ class Simulator:
                     enemy.state.alive = False
         return contacts
 
-    def _prune_dead_agents(self, enemy_contacts):
+    def _prune_dead_agents(self, enemy_contacts, collisions=None):
         dead_ids = {aid for aid, _ in enemy_contacts}
+        collisions = collisions or {}
+        for aid, crashed in collisions.items():
+            if crashed:
+                dead_ids.add(aid)
+        for aid, agent in self.agents.items():
+            if not agent.state.alive:
+                dead_ids.add(aid)
         for aid in list(dead_ids):
             self.agents.pop(aid, None)

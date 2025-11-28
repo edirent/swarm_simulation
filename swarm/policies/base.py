@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 
 class Policy(ABC):
     @abstractmethod
-    def build_observation(self, self_state, neighbor_msgs, visible_targets=None):
+    def build_observation(self, self_state, neighbor_msgs, visible_targets=None, visible_resource=None):
         ...
 
     @abstractmethod

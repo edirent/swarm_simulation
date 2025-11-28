@@ -4,21 +4,26 @@ import numpy as np
 from ..core.state import SwarmState
 
 
+TEAM_COLORS = {0: "blue", 1: "red", 2: "purple", 3: "orange"}
+
+
 class SwarmRenderer2D:
-    def __init__(self, bounds, obstacles=None, targets=None):
+    def __init__(self, bounds, obstacles=None, targets=None, resource=None):
         self.bounds = bounds
         self.obstacles = obstacles or []
         self.targets = targets or []
+        self.resource = resource
         self.fig, self.ax = plt.subplots(figsize=(7, 7))
         backend = plt.get_backend().lower()
         self._interactive = backend not in {"agg", "pdf", "svg"}
         if self._interactive:
             plt.ion()
-        self.scat = None
+        self.team_scatters = {}
         self.enemy_scat = None
         self.obstacle_patches = []
         self.target_patches = []
         self.target_labels = []
+        self.resource_patch = None
         self.ax.set_xlim(bounds[0], bounds[1])
         self.ax.set_ylim(bounds[2], bounds[3])
         self.ax.set_aspect("equal")
@@ -46,6 +51,17 @@ class SwarmRenderer2D:
                 zorder=3,
             )
             self.target_labels.append(label)
+        if self.resource is not None:
+            self.resource_patch = mpatches.Circle(
+                self.resource.center[:2],
+                self.resource.radius,
+                color="gold",
+                alpha=0.6,
+                zorder=2.5,
+                ec="orange",
+                lw=2,
+            )
+            self.ax.add_patch(self.resource_patch)
 
     def _update_targets(self):
         for tgt, patch in zip(self.targets, self.target_patches):
@@ -53,14 +69,34 @@ class SwarmRenderer2D:
             patch.set_color(color)
             patch.set_edgecolor("darkgreen" if tgt.active else "darkred")
             patch.set_alpha(0.5 if tgt.active else 0.25)
+        if self.resource_patch is not None and self.resource is not None:
+            self.resource_patch.center = self.resource.center[:2]
 
-    def render(self, swarm_state: SwarmState, enemies=None):
-        positions = np.array([a.pos for a in swarm_state.agents.values()])
-        if positions.size > 0:
-            if self.scat is None:
-                self.scat = self.ax.scatter(positions[:, 0], positions[:, 1], c="blue", s=20, zorder=4, alpha=0.8, label="agents")
+    def render(self, swarm_state: SwarmState, enemies=None, resource=None, scores=None):
+        if resource is not None:
+            self.resource = resource
+        team_to_positions = {}
+        for a in swarm_state.agents.values():
+            team_to_positions.setdefault(a.team, []).append(a.pos)
+        for team_id, pos_list in team_to_positions.items():
+            positions = np.array(pos_list)
+            if positions.size == 0:
+                continue
+            color = TEAM_COLORS.get(team_id, "blue")
+            scat = self.team_scatters.get(team_id)
+            if scat is None:
+                scat = self.ax.scatter(
+                    positions[:, 0],
+                    positions[:, 1],
+                    c=color,
+                    s=20,
+                    zorder=4,
+                    alpha=0.8,
+                    label=f"team {team_id}",
+                )
+                self.team_scatters[team_id] = scat
             else:
-                self.scat.set_offsets(positions[:, :2])
+                scat.set_offsets(positions[:, :2])
         enemies = enemies or []
         enemy_positions = np.array([e.state.pos for e in enemies if getattr(e.state, "alive", True)])
         if enemy_positions.size > 0:
@@ -78,6 +114,11 @@ class SwarmRenderer2D:
             else:
                 self.enemy_scat.set_offsets(enemy_positions[:, :2])
         self._update_targets()
-        self.ax.set_title(f"t={swarm_state.t:.2f}")
+        if self.resource_patch is not None and self.resource is not None:
+            self.resource_patch.center = self.resource.center[:2]
+        title = f"t={swarm_state.t:.2f}"
+        if scores:
+            title += f" | scores {scores}"
+        self.ax.set_title(title)
         if self._interactive:
             plt.pause(0.001)

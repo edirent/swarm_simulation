@@ -1,0 +1,26 @@
+inherits: base.yaml
+teams:
+  blue:
+    count: 12
+    policy:
+      type: nn
+      k_max: 5
+      hidden: 64
+  red:
+    count: 12
+    policy:
+      type: nn
+      k_max: 5
+      hidden: 64
+    frozen_policy:
+      type: boids
+      w_sep: 1.3
+      w_align: 0.6
+      w_coh: 0.4
+      w_resource: 1.3
+reward:
+  resource: 10.0
+resource:
+  enabled: true
+  radius: 0.8
+  margin: 1.5

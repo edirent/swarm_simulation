@@ -12,6 +12,7 @@ class SwarmMessage:
     role: int
     task_id: int | None
     t: float
+    team: int
 
     @classmethod
     def from_state(cls, state: AgentState):
@@ -23,4 +24,5 @@ class SwarmMessage:
             role=state.role,
             task_id=state.task_id,
             t=0.0,  # overwritten by simulator time if needed
+            team=state.team,
         )

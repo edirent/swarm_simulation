@@ -11,6 +11,7 @@ class AgentState:
     role: int            # 0=normal, 1=leader, etc.
     task_id: int | None
     alive: bool = True
+    team: int = 0        # 0=blue, 1=red (or more teams later)
 
 
 @dataclass

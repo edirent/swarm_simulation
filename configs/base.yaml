@@ -40,7 +40,30 @@ policy:
   w_sep: 1.2
   w_align: 0.6
   w_coh: 0.6
+  w_resource: 1.0
   max_speed: 1.0
+resource:
+  enabled: true
+  radius: 0.7
+  margin: 1.0
+  seed: 0
+teams:
+  blue:
+    count: 15
+    policy:
+      type: boids
+      w_sep: 1.2
+      w_align: 0.6
+      w_coh: 0.6
+      w_resource: 1.0
+  red:
+    count: 15
+    policy:
+      type: boids
+      w_sep: 1.2
+      w_align: 0.6
+      w_coh: 0.4
+      w_resource: 1.1
 agents:
   count: 30
 reward:
@@ -49,3 +72,4 @@ reward:
   boundary: -10.0
   step: -0.01
   approach: 0.1
+  resource: 8.0

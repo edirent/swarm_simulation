@@ -14,14 +14,44 @@ class Target:
         self.active = True
 
 
+class ResourcePoint:
+    def __init__(self, center, radius=0.5):
+        self.center = np.array(center, dtype=float)
+        self.radius = float(radius)
+
+
 class SwarmEnv:
-    def __init__(self, bounds, obstacles=None, targets=None, tasks=None, sense_radius: float | None = None, enemies=None):
+    def __init__(
+        self,
+        bounds,
+        obstacles=None,
+        targets=None,
+        tasks=None,
+        sense_radius: float | None = None,
+        enemies=None,
+        resource_cfg: dict | None = None,
+        resource=None,
+        rng=None,
+    ):
         self.bounds = bounds  # [xmin, xmax, ymin, ymax]
         self.obstacles = obstacles or []
         self.targets = targets or []
         self.tasks = tasks or []
         self.sense_radius = sense_radius
         self.enemy_spawns = enemies or []
+        self.rng = rng or np.random.default_rng(resource_cfg.get("seed") if resource_cfg else None)
+        self.resource_cfg = resource_cfg or {}
+        self.resource_enabled = self.resource_cfg.get("enabled", True)
+        if not self.resource_enabled:
+            self.resource = None
+        elif resource is not None:
+            self.resource = resource
+        else:
+            center = self.resource_cfg.get("center")
+            radius = self.resource_cfg.get("radius", 0.6)
+            if center is None:
+                center = self._sample_resource_center(radius)
+            self.resource = ResourcePoint(center, radius) if center is not None else None
 
     def visible_neighbors(self, self_state, swarm_state):
         """
@@ -51,6 +81,14 @@ class SwarmEnv:
             if d <= self.sense_radius:
                 vis.append(t)
         return vis
+
+    def visible_resource(self, self_state):
+        if self.resource is None or not self.resource_enabled:
+            return None
+        if self.sense_radius is None:
+            return self.resource
+        d = np.linalg.norm(self.resource.center - self_state.pos)
+        return self.resource if d <= self.sense_radius else None
 
     def enforce_constraints(self, swarm_state, tol=1e-6, damp_on_hit: float | None = 1.0):
         """
@@ -93,14 +131,37 @@ class SwarmEnv:
                 )
         return boundary_hits
 
+    def _sample_resource_center(self, radius):
+        if self.bounds is None or not self.resource_enabled:
+            return None
+        xmin, xmax, ymin, ymax = self.bounds
+        margin = self.resource_cfg.get("margin", 0.5)
+        for _ in range(64):
+            cand = self.rng.uniform(
+                [xmin + radius + margin, ymin + radius + margin],
+                [xmax - radius - margin, ymax - radius - margin],
+            )
+            if all(np.linalg.norm(cand - obs.center) > obs.radius + radius + margin for obs in self.obstacles):
+                return cand
+        return np.array([xmin + xmax, ymin + ymax], dtype=float) / 2.0
+
+    def respawn_resource(self):
+        if self.resource is None or not self.resource_enabled:
+            return None
+        new_center = self._sample_resource_center(self.resource.radius)
+        self.resource.center = new_center
+        return new_center
+
     def check_collisions(self, swarm_state):
         """
         Returns:
           collisions: {agent_id: True/False}
           hits: {agent_id: [target_idx, ...]}
+          resource_event: dict | None ({"agent_id": int, "old_center": np.ndarray, "new_center": np.ndarray})
         """
         collisions = {i: False for i in swarm_state.agents.keys()}
         hits = {i: [] for i in swarm_state.agents.keys()}
+        resource_event = None
 
         for i, st in swarm_state.agents.items():
             p = st.pos
@@ -109,6 +170,7 @@ class SwarmEnv:
                 d = np.linalg.norm(p - obs.center)
                 if d <= obs.radius:
                     collisions[i] = True
+                    st.alive = False  # hit obstacle -> destroyed
                     break
 
             for idx, tgt in enumerate(self.targets):
@@ -118,12 +180,19 @@ class SwarmEnv:
                 if d <= tgt.radius:
                     hits[i].append(idx)
 
+            if self.resource is not None and self.resource_enabled and resource_event is None:
+                d_res = np.linalg.norm(p - self.resource.center)
+                if d_res <= self.resource.radius:
+                    old_center = self.resource.center.copy()
+                    new_center = self.respawn_resource()
+                    resource_event = {"agent_id": i, "old_center": old_center, "new_center": new_center}
+
         for idx, tgt in enumerate(self.targets):
             for _, lst in hits.items():
                 if idx in lst:
                     tgt.active = False
 
-        return collisions, hits
+        return collisions, hits, resource_event
 
     def all_targets_done(self):
         return bool(self.targets) and all(not t.active for t in self.targets)

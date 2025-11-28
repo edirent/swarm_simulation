@@ -63,6 +63,7 @@ def build_env(cfg):
         targets=targets,
         sense_radius=env_cfg.get("sense_radius", None),
         enemies=env_cfg.get("enemies", []),
+        resource_cfg=cfg.get("resource", {}),
     )
 
 
@@ -83,9 +84,11 @@ def build_agents(cfg, policy):
     return agents
 
 
-def expert_action(self_state, neighbor_msgs, env, boids_policy: BoidsPolicy, target_gain=1.0, obs_gain=1.5):
-    # base boids
-    base = boids_policy.act((self_state, neighbor_msgs))
+def expert_action(self_state, neighbor_msgs, env, boids_policy: BoidsPolicy, target_gain=1.0, obs_gain=1.5, resource_gain=1.0):
+    visible_targets = env.visible_targets(self_state)
+    visible_resource = env.visible_resource(self_state)
+    # base boids (with built-in resource pull)
+    base = boids_policy.act((self_state, neighbor_msgs, visible_targets, visible_resource))
     # target attraction
     target_term = np.zeros_like(self_state.vel)
     active = [t for t in env.targets if t.active]
@@ -102,7 +105,12 @@ def expert_action(self_state, neighbor_msgs, env, boids_policy: BoidsPolicy, tar
         dist = np.linalg.norm(vec)
         if dist < obs.radius + 1.5:
             obs_term += vec / max(dist, 1e-6)
-    return base + target_gain * target_term + obs_gain * obs_term
+    resource_term = np.zeros_like(self_state.vel)
+    if visible_resource is not None:
+        vec_r = visible_resource.center - self_state.pos
+        n = np.linalg.norm(vec_r) + 1e-6
+        resource_term = vec_r / n
+    return base + target_gain * target_term + obs_gain * obs_term + resource_gain * resource_term
 
 
 def collect_dataset(cfg, episodes=5, max_steps=500):
@@ -136,7 +144,8 @@ def collect_dataset(cfg, episodes=5, max_steps=500):
                 if env.sense_radius is not None:
                     msgs = [m for m in msgs if np.linalg.norm(m.pos - agent.state.pos) <= env.sense_radius]
                 visible_targets = env.visible_targets(agent.state)
-                obs = student_obs_encoder.build_observation(agent.state, msgs, visible_targets)
+                visible_resource = env.visible_resource(agent.state)
+                obs = student_obs_encoder.build_observation(agent.state, msgs, visible_targets, visible_resource)
                 act = expert_action(agent.state, msgs, env, boids)
                 obs_buf.append(obs)
                 act_buf.append(act.astype(np.float32))
@@ -145,7 +154,7 @@ def collect_dataset(cfg, episodes=5, max_steps=500):
             # build SwarmState-like for constraints and collisions
             swarm_state_obj = type("SS", (), {"agents": swarm_state, "t": step * dt})
             env.enforce_constraints(swarm_state_obj)
-            collisions, hits = env.check_collisions(swarm_state_obj)
+            collisions, hits, _ = env.check_collisions(swarm_state_obj)
             if env.all_targets_done():
                 break
     X = np.stack(obs_buf).astype(np.float32)

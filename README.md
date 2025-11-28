@@ -23,6 +23,12 @@ python scripts/run_sim.py --no-render
 ```
 Boids-style swarm在有障碍（圆形树木）和目标的地图上飞行，命中目标得分、撞树扣分。加上/去掉 `--no-render` 控制是否可视化。
 
+### 资源争夺 + 自博弈
+- 地图上有 1 个可抢占的资源点（黄色圆），蓝/红任意一方吃到加分，立即随机换点（诱导集结、换线、包抄）。
+- Agent 观测增加：资源相对位置 + team id；渲染器显示双方得分。
+- 运行对抗可视化：`python scripts/run_sim.py --config configs/base.yaml`
+- 交替自博弈训练：`python scripts/train_self_play.py --config configs/self_play.yaml --generations 4 --episodes 20`
+
 ### CLI options
 - `--config configs/base.yaml` to load a YAML config (supports `inherits: base.yaml` for overrides).
 - `--no-render` to run headless.

@@ -1,6 +1,11 @@
 inherits: base.yaml
 agents:
   count: 10
+teams:
+  blue:
+    count: 5
+  red:
+    count: 5
 network:
   loss_prob: 0.05
   max_range: 4.0

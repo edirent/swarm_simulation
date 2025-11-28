@@ -22,6 +22,7 @@ from swarm.policies.nn_mlp import TinyMLP, NNPolicy, get_device
 from swarm.viz.render_2d import SwarmRenderer2D
 from swarm.viz.logger import SwarmLogger
 
+TEAM_NAME_TO_ID = {"blue": 0, "red": 1}
 
 DEFAULT_CONFIG = {
     "dt": 0.1,
@@ -50,7 +51,7 @@ DEFAULT_CONFIG = {
         ],
     },
     "network": {"loss_prob": 0.1, "max_range": 5.0},
-    "policy": {
+    "policy": {  # fallback for single-team legacy usage
         "type": "boids",  # boids | tinyml | nn
         "w_sep": 1.0,
         "w_align": 0.5,
@@ -60,8 +61,13 @@ DEFAULT_CONFIG = {
         "k_max": 5,
         "checkpoint": None,
     },
-    "agents": {"count": 30},
-    "reward": {"hit": 10.0, "crash": -5.0, "step": -0.01, "approach": 0.1, "boundary": -10.0},
+    "teams": {
+        "blue": {"count": 15, "policy": {"type": "boids"}},
+        "red": {"count": 15, "policy": {"type": "boids", "w_sep": 1.2, "w_coh": 0.3}},
+    },
+    "agents": {"count": 30},  # legacy single-team fallback
+    "resource": {"enabled": True, "radius": 0.7, "margin": 1.0, "seed": 0},
+    "reward": {"hit": 10.0, "crash": -5.0, "step": -0.01, "approach": 0.1, "boundary": -10.0, "resource": 8.0},
 }
 
 
@@ -89,14 +95,18 @@ def load_config(path: pathlib.Path | None) -> dict:
     return deep_update(DEFAULT_CONFIG, cfg)
 
 
-def make_policy(policy_cfg):
+def make_policy(policy_cfg, bounds):
     if policy_cfg.get("type", "boids") == "boids":
-        return BoidsPolicy(
+        policy = BoidsPolicy(
             w_sep=policy_cfg.get("w_sep", 1.0),
             w_align=policy_cfg.get("w_align", 0.5),
             w_coh=policy_cfg.get("w_coh", 0.5),
+            w_target=policy_cfg.get("w_target", 0.3),
+            w_resource=policy_cfg.get("w_resource", 0.8),
             max_speed=policy_cfg.get("max_speed", 1.0),
         )
+        setattr(policy, "bounds", bounds)
+        return policy
     if policy_cfg.get("type") == "nn":
         k_max = policy_cfg.get("k_max", 5)
         hidden = policy_cfg.get("hidden", 32)
@@ -107,21 +117,49 @@ def make_policy(policy_cfg):
         if ckpt:
             sd = torch.load(ckpt, map_location=device)
             model.load_state_dict(sd)
-        return NNPolicy(model, k_max=k_max, dim=2, device=device)
+        policy = NNPolicy(model, k_max=k_max, dim=2, device=device)
+        setattr(policy, "bounds", bounds)
+        return policy
 
     # tiny NumPy MLP fallback
     k_max = policy_cfg.get("k_max", 5)
     hidden = policy_cfg.get("hidden", 16)
     seed = policy_cfg.get("seed", 0)
     weights = TinyMLPPolicy.init_weights(dim=2, k_max=k_max, hidden=hidden, seed=seed)
-    return TinyMLPPolicy(weights=weights, hidden=hidden, k_max=k_max, seed=seed, dim=2)
+    policy = TinyMLPPolicy(weights=weights, hidden=hidden, k_max=k_max, seed=seed, dim=2)
+    setattr(policy, "bounds", bounds)
+    return policy
 
 
 def build_agents(cfg, bounds):
     agents = []
+    team_cfgs = cfg.get("teams")
+    if team_cfgs:
+        next_id = 0
+        # deterministic mapping for readability
+        name_to_id = dict(TEAM_NAME_TO_ID)
+        for team_name, tcfg in team_cfgs.items():
+            team_id = tcfg.get("team_id", name_to_id.get(team_name, len(name_to_id)))
+            name_to_id.setdefault(team_name, team_id)
+            count = tcfg.get("count", 0)
+            policy = make_policy(tcfg.get("policy", cfg.get("policy", {})), bounds)
+            for _ in range(count):
+                st = AgentState(
+                    id=next_id,
+                    pos=np.random.uniform(bounds[0], bounds[1], size=2),
+                    vel=np.zeros(2),
+                    battery=1.0,
+                    role=0,
+                    task_id=None,
+                    team=team_id,
+                )
+                agents.append(Agent(st, policy))
+                next_id += 1
+        return agents
+
+    # legacy single-team path
     N = cfg["agents"]["count"]
-    shared_policy = make_policy(cfg["policy"])
-    setattr(shared_policy, "bounds", bounds)
+    shared_policy = make_policy(cfg["policy"], bounds)
     for i in range(N):
         st = AgentState(
             id=i,
@@ -130,6 +168,7 @@ def build_agents(cfg, bounds):
             battery=1.0,
             role=0,
             task_id=None,
+            team=0,
         )
         agents.append(Agent(st, shared_policy))
     return agents
@@ -151,6 +190,7 @@ def build_env(cfg):
         targets=targets,
         sense_radius=env_cfg.get("sense_radius", None),
         enemies=env_cfg.get("enemies", []),
+        resource_cfg=cfg.get("resource", {}),
     )
 
 
@@ -180,15 +220,19 @@ def main():
         max_range=cfg["network"].get("max_range", None),
     )
     sim = Simulator(agents, env, net, dt=cfg["dt"], reward_cfg=cfg.get("reward"))
-    renderer = None if args.no_render else SwarmRenderer2D(bounds=bounds, obstacles=env.obstacles, targets=env.targets)
+    renderer = None if args.no_render else SwarmRenderer2D(bounds=bounds, obstacles=env.obstacles, targets=env.targets, resource=env.resource)
     logger = SwarmLogger(args.log) if args.log else None
 
     for step in range(cfg["steps"]):
-        state, rewards, collisions, done, hits = sim.step()
+        state, rewards, collisions, done, hits, resource_event = sim.step()
         if renderer and step % cfg["render_every"] == 0:
-            renderer.render(state, enemies=list(sim.enemies.values()))
+            renderer.render(state, enemies=list(sim.enemies.values()), resource=env.resource, scores=sim.team_scores)
         if logger:
-            logger.log_state(state)
+            logger.log_state(state, scores=sim.team_scores, resource=env.resource)
+        if resource_event is not None and (step % max(1, cfg["render_every"]) == 0):
+            aid = resource_event["agent_id"]
+            team = state.agents[aid].team
+            print(f"[t={state.t:.2f}] Agent {aid} (team {team}) captured resource; scores={sim.team_scores}")
         if done:
             print(f"All targets collected at step {step}")
             break
