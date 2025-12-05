@@ -1,3 +1,0 @@
-"""
-Swarm simulation package.
-"""

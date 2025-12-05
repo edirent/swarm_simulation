@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>mission_ui</name>
+  <version>0.0.1</version>
+  <description>Operator UI for Phase 1 swarm simulation.</description>
+  <maintainer email="todo@example.com">TODO</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
+
+  <exec_depend>pygame</exec_depend>
+  <exec_depend>numpy</exec_depend>
+  <exec_depend>shapely</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

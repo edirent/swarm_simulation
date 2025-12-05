@@ -1,3 +1,0 @@
-"""
-Visualization and logging utilities.
-"""

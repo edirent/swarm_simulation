@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>swarm_core</name>
+  <version>0.0.1</version>
+  <description>Swarm coordinator, control, and perception nodes for Phase 1 simulation.</description>
+  <maintainer email="todo@example.com">TODO</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>custom_msgs</depend>
+
+  <exec_depend>numpy</exec_depend>
+  <exec_depend>opencv-python</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
